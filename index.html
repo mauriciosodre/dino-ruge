@@ -47,13 +47,45 @@
 
   /* ---------- O DINO: a estrela. Cresce e pula com o rugido ---------- */
   #dino{position:absolute; left:50%; bottom:20vh; transform:translateX(-50%);
-        font-size:30vmin; line-height:1; transition:none; cursor:pointer;
+        font-size:30vmin; line-height:1; transition:none; cursor:pointer; z-index:2;
         filter:drop-shadow(0 1vh 0 rgba(0,0,0,.12));}
 
+  /* Anel de carga atrás do dino: enche conforme o rugido acumula força */
+  #aura{position:absolute; left:50%; bottom:17vh; transform:translateX(-50%);
+        width:44vmin; height:44vmin; border-radius:50%; opacity:0; z-index:1;
+        background:conic-gradient(var(--laranja) var(--ang,0deg), rgba(255,255,255,.30) 0deg);
+        -webkit-mask:radial-gradient(closest-side, transparent 76%, #000 78%);
+                mask:radial-gradient(closest-side, transparent 76%, #000 78%);
+        transition:opacity .2s ease;}
+  #aura.ativo{opacity:.95;}
+
+  /* Balão de rugido que aparece quando ruge forte */
+  #bolha{position:absolute; left:63%; bottom:43vh; font-size:13vmin; line-height:1; z-index:6;
+         opacity:0; transform:scale(.4) rotate(-12deg); pointer-events:none;
+         transition:opacity .08s, transform .08s;}
+  #bolha.ativo{opacity:1; transform:scale(1) rotate(-6deg);}
+
+  /* Bichinho-alvo treme enquanto a carga sobe (antecipação) */
+  @keyframes tremer{0%,100%{transform:translateX(0)}25%{transform:translateX(-1.2vmin)}75%{transform:translateX(1.2vmin)}}
+  .bicho.medo{animation:tremer .16s linear infinite;}
+
+  /* Estrelinha de "poof" quando o bicho foge */
+  .poof{position:absolute; font-size:9vmin; pointer-events:none; z-index:7;
+        animation:poof .6s ease forwards;}
+  @keyframes poof{0%{opacity:1; transform:scale(.3)}100%{opacity:0; transform:scale(1.8) translateY(-6vh)}}
+
   /* Bichinhos pra espantar */
-  .bicho{position:absolute; bottom:21vh; font-size:11vmin; line-height:1;
+  .bicho{position:absolute; bottom:21vh; font-size:11vmin; line-height:1; z-index:4;
          transition:transform .5s cubic-bezier(.34,1.56,.64,1), opacity .5s ease;}
   .bicho.foi{transform:translate(var(--fugaX,40vw),-30vh) rotate(40deg) scale(.4); opacity:0;}
+
+  /* Faixa de transição de fase */
+  #faixa{position:absolute; top:16vh; left:50%; transform:translateX(-50%) scale(.6);
+         background:#fff; color:var(--texto); font-family:var(--fonte); font-weight:700;
+         font-size:7vmin; padding:1.8vh 6vw; border-radius:8vmin; white-space:nowrap;
+         box-shadow:0 1vh 0 rgba(0,0,0,.12); opacity:0; pointer-events:none; z-index:8;
+         transition:opacity .3s ease, transform .3s ease;}
+  #faixa.ativo{opacity:1; transform:translateX(-50%) scale(1);}
 
   /* Medidor de rugido (folha que enche) */
   #medidor{position:absolute; left:5vw; bottom:20vh; width:9vmin; height:42vh;
@@ -92,7 +124,8 @@
 
   @media (prefers-reduced-motion: reduce){
     .bicho,#nivel,.botao,#placar span{transition:none;}
-    .confete{display:none;}
+    .bicho.medo{animation:none;}
+    .confete,.poof{display:none;}
   }
 </style>
 </head>
@@ -103,21 +136,21 @@
   <div class="nuvem" id="n2"></div>
   <div id="chao"></div>
 
-  <div id="placar"><span>🐰</span><span>🐤</span><span>🐢</span></div>
+  <div id="placar"></div>
 
   <div id="medidor"><div id="nivel"></div></div>
 
-  <div class="bicho" style="left:18vw; --fugaX:-50vw;">🐰</div>
-  <div class="bicho" style="left:70vw; --fugaX:50vw;">🐤</div>
-  <div class="bicho" style="left:82vw; --fugaX:55vw;">🐢</div>
+  <div id="faixa"></div>
 
+  <div id="aura"></div>
   <div id="dino" role="button" aria-label="Dino. Toque para rugir.">🦖</div>
+  <div id="bolha">🗯️</div>
 
   <!-- Tela inicial: precisa de um toque pra liberar áudio/microfone no navegador -->
   <div class="tela" id="telaInicio">
     <div class="titulo">🦖<br>DINO RUGE</div>
     <button class="botao" id="btnComecar">▶<small>começar</small></button>
-    <div class="dica">Rugir alto faz o dino pular e espantar os bichinhos! Toque no dino também vale 🗯️</div>
+    <div class="dica">Rugir FORTE e sem parar enche o anel e espanta os bichinhos! Toque no dino também ajuda 🗯️</div>
   </div>
 
   <!-- Tela de vitória -->
@@ -138,20 +171,49 @@
 const $ = (s)=>document.querySelector(s);
 const dino    = $("#dino");
 const nivelEl = $("#nivel");
-const bichos  = [...document.querySelectorAll(".bicho")];
-const placar  = [...document.querySelectorAll("#placar span")];
+const aura    = $("#aura");
+const bolha   = $("#bolha");
+const palco   = $("#palco");
+const placarEl= $("#placar");
+const faixa   = $("#faixa");
+let bichos = [];   // divs dos bichos, recriados a cada fase
+let placar = [];   // plaquinhas do topo, idem
 
 // ---------- ESTADO DO JOGO ----------
 const estado = {
   rodando:false,
-  volume:0,        // 0..1 suavizado
-  espantados:0,    // quantos bichinhos já fugiram
-  armado:true,     // histerese: só espanta de novo após o volume baixar
+  volume:0,        // 0..1 suavizado (instantâneo)
+  carga:0,         // 0..1 força acumulada do rugido pro bichinho da vez
+  faseIdx:0,
+  espantados:0,    // dentro da fase atual
 };
 
-// Limiares do rugido (histerese evita espantar os 3 de uma vez num grito só)
-const LIMIAR_ALTO = 0.22;  // GODOT: passa de ALTO  -> conta um rugido
-const LIMIAR_BAIXO= 0.08;  // GODOT: cai abaixo     -> "re-arma" pro próximo
+// ---------- DIFICULDADE BASE (é só aqui que se mexe) ----------
+const GANHO      = 2.0;   // ganho do microfone: MENOR = precisa rugir mais alto
+const FORCA_MIN  = 0.34;  // só volume ACIMA disso enche a carga -> som baixo NÃO conta
+const VEL_CARGA  = 2.3;   // quão rápido a carga enche num rugido forte (por segundo)
+const DECAIMENTO = 1.3;   // quão rápido a carga escorre quando fica quieto (por segundo)
+
+// ---------- FASES (adicione/edite à vontade) ----------
+// Cada fase: um tema de céu, um nível de dificuldade e a lista de bichos (emoji + nome falado).
+const FASES = [
+  { nome:"Quintal",  ceu:["#7ec8ff","#b8e6ff"], dificuldade:1.00, bichos:[
+      {emoji:"🐰",nome:"coelho"},   {emoji:"🐤",nome:"pintinho"}, {emoji:"🐢",nome:"tartaruga"}]},
+  { nome:"Fazenda",  ceu:["#ffcf8f","#ffe6c2"], dificuldade:1.15, bichos:[
+      {emoji:"🐄",nome:"vaca"},     {emoji:"🐷",nome:"porco"},    {emoji:"🐔",nome:"galinha"}]},
+  { nome:"Floresta", ceu:["#9fe0b6","#cdeedd"], dificuldade:1.30, bichos:[
+      {emoji:"🦊",nome:"raposa"},   {emoji:"🦉",nome:"coruja"},   {emoji:"🐿️",nome:"esquilo"}]},
+  { nome:"Selva",    ceu:["#8fd6e8","#c2ecf3"], dificuldade:1.50, bichos:[
+      {emoji:"🐵",nome:"macaco"},   {emoji:"🐘",nome:"elefante"}, {emoji:"🦁",nome:"leão"}]},
+];
+
+// Posições dos bichos no chão (em vw) e pra onde cada um foge
+const SLOTS = [
+  {left:14, fuga:-58}, {left:72, fuga:58}, {left:86, fuga:64}, {left:30, fuga:-64},
+];
+
+// Dificuldade efetiva da fase atual (preenchida em montarFase)
+let efForcaMin = FORCA_MIN, efVel = VEL_CARGA;
 
 // ---------- ÁUDIO: microfone -> analisador ----------
 // GODOT: AudioStreamMicrophone num bus com AudioEffectCapture.
@@ -161,7 +223,6 @@ let audioCtx, analisador, dados;
 async function iniciarMic(){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    audioCtx   = new (window.AudioContext||window.webkitAudioContext)();
     const src  = audioCtx.createMediaStreamSource(stream);
     analisador = audioCtx.createAnalyser();
     analisador.fftSize = 1024;
@@ -186,40 +247,57 @@ function lerVolume(){
     soma += v*v;
   }
   const rms = Math.sqrt(soma/dados.length);
-  return Math.min(1, rms*3.2);      // ganho pra um rugido normal já encher a barra
+  return Math.min(1, rms*GANHO);    // ganho menor: agora exige rugido de verdade
 }
 
 // ---------- LOOP PRINCIPAL ----------
 // GODOT: o conteúdo daqui vai no _process(delta).
-function loop(){
+let ultimoTs = 0;
+function loop(ts){
   if(!estado.rodando) return;
+  const dt = ultimoTs ? Math.min(0.05, (ts - ultimoTs)/1000) : 0.016; // segundos
+  ultimoTs = ts;
 
   const alvo = lerVolume();
   // Suavização (lerp) pra reação não tremer. GODOT: lerp(volume, alvo, 0.3)
   estado.volume += (alvo - estado.volume) * 0.3;
 
-  reagir(estado.volume);
-  detectarRugido(estado.volume);
+  acumularCarga(dt);
+  reagir(ts);
 
   requestAnimationFrame(loop);
 }
 
-// O dino cresce e pula proporcional ao volume — o "feedback" que dá vida
-function reagir(vol){
-  const escala = 1 + vol*0.9;           // cresce
-  const pulo   = vol*22;                // sobe (vh)
-  dino.style.transform = `translateX(-50%) translateY(${-pulo}vh) scale(${escala})`;
-  nivelEl.style.height = (vol*100)+"%";
+// Som forte (acima de FORCA_MIN) ENCHE a carga; quieto, ela escorre.
+// Quando a carga chega a 1, o bichinho da vez foge. GODOT: igual em _process(delta).
+function acumularCarga(dt){
+  const v = estado.volume;
+  if(v > efForcaMin){
+    estado.carga += (v - efForcaMin) * efVel * dt;
+  }else{
+    estado.carga -= DECAIMENTO * dt;
+  }
+  estado.carga = Math.max(0, Math.min(1, estado.carga));
+
+  // o bichinho-alvo treme mais conforme a carga sobe (antecipação)
+  const atual = bichos[estado.espantados];
+  if(atual) atual.classList.toggle("medo", estado.carga > 0.15);
+
+  if(estado.carga >= 1) espantarProximo();
 }
 
-// Histerese: passou do alto (e estava armado) => espanta um bichinho
-function detectarRugido(vol){
-  if(estado.armado && vol > LIMIAR_ALTO){
-    estado.armado = false;
-    espantarProximo();
-  }else if(!estado.armado && vol < LIMIAR_BAIXO){
-    estado.armado = true;             // re-arma pro próximo rugido distinto
-  }
+// Feedback visual: dino cresce com a FORÇA, respira parado, anel e balão de rugido
+function reagir(ts){
+  const v = estado.volume, c = estado.carga;
+  const bob    = Math.sin(ts/350) * 1.2;        // respira mesmo em silêncio
+  const escala = 1 + c*0.5 + v*0.45;            // cresce com a carga
+  const pulo   = v*16 + c*6;
+  dino.style.transform = `translateX(-50%) translateY(${-(pulo+bob)}vh) scale(${escala})`;
+
+  nivelEl.style.height = (v*100)+"%";                 // barra = volume ao vivo
+  aura.classList.toggle("ativo", c > 0.02);           // anel = carga acumulada
+  aura.style.setProperty("--ang", (c*360)+"deg");
+  bolha.classList.toggle("ativo", v > efForcaMin);    // 🗯️ quando ruge forte
 }
 
 // ---------- AÇÕES DO JOGO ----------
@@ -228,15 +306,114 @@ const NUMEROS = ["um","dois","três"];
 function espantarProximo(){
   if(estado.espantados >= bichos.length) return;
   const i = estado.espantados;
-  bichos[i].classList.add("foi");
+  const bicho = bichos[i];
+  bicho.classList.remove("medo");
+  poofEm(bicho);                     // estrelinha ✨ + som de pop
+  bicho.classList.add("foi");
   placar[i].classList.add("foi");
   estado.espantados++;
+  estado.carga = 0;                  // zera a carga pro próximo
 
-  falar(NUMEROS[i]);                  // conta em voz alta: "um... dois... três"
+  falar(NUMEROS[i]);                 // conta em voz alta: "um... dois... três"
 
   if(estado.espantados === bichos.length){
-    setTimeout(vencer, 700);
+    setTimeout(proximaFase, 700);    // fim da fase -> próxima (ou vitória final)
   }
+}
+
+// ---------- FASES ----------
+// Monta os bichos e o tema da fase idx. GODOT: equivalente a instanciar uma cena de fase.
+function montarFase(idx){
+  const fase = FASES[idx];
+  estado.faseIdx = idx;
+  estado.espantados = 0;
+  estado.carga = 0;
+
+  // dificuldade efetiva: fases mais altas exigem rugido mais forte e mais longo
+  efForcaMin = FORCA_MIN + (fase.dificuldade - 1) * 0.10;
+  efVel      = VEL_CARGA / fase.dificuldade;
+
+  // tema do céu
+  document.body.style.background =
+    `linear-gradient(180deg, ${fase.ceu[0]} 0%, ${fase.ceu[1]} 55%)`;
+
+  // limpa o que sobrou da fase anterior
+  bichos.forEach(b => b.remove());
+  bichos = []; placar = []; placarEl.innerHTML = "";
+
+  // cria os bichos desta fase + as plaquinhas do topo
+  fase.bichos.forEach((dado, i) => {
+    const slot = SLOTS[i % SLOTS.length];
+    const el = document.createElement("div");
+    el.className = "bicho";
+    el.textContent = dado.emoji;
+    el.dataset.nome = dado.nome;
+    el.style.left = slot.left + "vw";
+    el.style.setProperty("--fugaX", slot.fuga + "vw");
+    // tocar no bicho: ele pula e o app fala o nome (interativo + didático)
+    el.addEventListener("pointerdown", (e) => {
+      if(!estado.rodando || el.classList.contains("foi")) return;
+      e.stopPropagation();
+      el.animate([{transform:"translateY(0)"},{transform:"translateY(-8vh)"},{transform:"translateY(0)"}],
+                 {duration:380, easing:"ease"});
+      falar(el.dataset.nome);
+    });
+    palco.insertBefore(el, aura);
+    bichos.push(el);
+
+    const sp = document.createElement("span");
+    sp.textContent = dado.emoji;
+    placarEl.appendChild(sp);
+    placar.push(sp);
+  });
+}
+
+// Vai pra próxima fase, ou vence se era a última
+function proximaFase(){
+  const prox = estado.faseIdx + 1;
+  if(prox >= FASES.length){ vencer(); return; }
+  estado.rodando = false;                 // pausa curtinha na virada
+  const fase = FASES[prox];
+  falar("Muito bem!");
+  setTimeout(() => {
+    montarFase(prox);
+    mostrarFaixa("Fase " + (prox + 1) + " · " + fase.nome);
+    estado.rodando = true; ultimoTs = 0;
+    requestAnimationFrame(loop);
+  }, 900);
+}
+
+// Faixa "Fase N" que aparece e some
+function mostrarFaixa(texto){
+  faixa.textContent = texto;
+  faixa.classList.add("ativo");
+  clearTimeout(mostrarFaixa._t);
+  mostrarFaixa._t = setTimeout(() => faixa.classList.remove("ativo"), 1500);
+}
+
+// Estrelinha no lugar do bicho que fugiu
+function poofEm(el){
+  const r = el.getBoundingClientRect();
+  const s = document.createElement("div");
+  s.className = "poof"; s.textContent = "✨";
+  s.style.left = (r.left + r.width/2)/innerWidth*100 + "vw";
+  s.style.top  = (r.top)/innerHeight*100 + "vh";
+  document.getElementById("palco").appendChild(s);
+  setTimeout(()=>s.remove(), 600);
+  tocarPop();
+}
+
+// Som curto de "pop" — reusa o audioCtx, funciona até sem microfone
+function tocarPop(){
+  if(!audioCtx) return;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime;
+  o.type = "triangle";
+  o.frequency.setValueAtTime(720, t);
+  o.frequency.exponentialRampToValueAtTime(180, t+0.18);
+  g.gain.setValueAtTime(0.25, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t+0.25);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t); o.stop(t+0.26);
 }
 
 // Voz pt-BR (sem texto na tela pra criança ler)
@@ -255,33 +432,35 @@ function vencer(){
   $("#telaFim").classList.remove("oculto");
 }
 
-// Toque no dino também conta como rugido (fallback e diversão pra mãos pequenas)
+// Toque no dino empurra a carga (fallback sem mic + diversão pra mãos pequenas)
 dino.addEventListener("pointerdown", ()=>{
   if(!estado.rodando) return;
-  // simula um pico curto de volume
-  estado.volume = 0.6; estado.armado = true;
-  detectarRugido(estado.volume);
-  reagir(estado.volume);
+  estado.carga = Math.min(1, estado.carga + 0.34);  // ~3 toques espantam um
+  estado.volume = 0.6;                               // dá o feedback visual
+  if(estado.carga >= 1) espantarProximo();
 });
+
+// (toque nos bichos é configurado dentro de montarFase, pois eles são criados por fase)
 
 // ---------- CONTROLE DE TELAS ----------
 async function comecar(){
   $("#telaInicio").classList.add("oculto");
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)(); // áudio p/ mic + efeitos
   await iniciarMic();                 // pede o microfone (precisa do toque do usuário)
-  reset();
-  estado.rodando = true;
-  loop();
+  iniciarPartida();
 }
 
-function reset(){
-  estado.espantados = 0; estado.volume = 0; estado.armado = true;
-  bichos.forEach(b=>b.classList.remove("foi"));
-  placar.forEach(p=>p.classList.remove("foi"));
+// Começa (ou recomeça) da fase 1
+function iniciarPartida(){
   $("#telaFim").classList.add("oculto");
+  montarFase(0);
+  mostrarFaixa("Fase 1 · " + FASES[0].nome);
+  estado.rodando = true; ultimoTs = 0;
+  requestAnimationFrame(loop);
 }
 
 $("#btnComecar").addEventListener("click", comecar);
-$("#btnDeNovo").addEventListener("click", ()=>{ reset(); estado.rodando=true; loop(); });
+$("#btnDeNovo").addEventListener("click", iniciarPartida);
 
 // ---------- Confete (só enfeite da vitória) ----------
 function jogarConfete(){
