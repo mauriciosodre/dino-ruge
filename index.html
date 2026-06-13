@@ -189,21 +189,21 @@ const estado = {
 };
 
 // ---------- DIFICULDADE BASE (é só aqui que se mexe) ----------
-const GANHO      = 2.0;   // ganho do microfone: MENOR = precisa rugir mais alto
-const FORCA_MIN  = 0.34;  // só volume ACIMA disso enche a carga -> som baixo NÃO conta
-const VEL_CARGA  = 2.3;   // quão rápido a carga enche num rugido forte (por segundo)
-const DECAIMENTO = 1.3;   // quão rápido a carga escorre quando fica quieto (por segundo)
+const GANHO      = 2.3;   // ganho do microfone: MENOR = precisa rugir mais alto
+const FORCA_MIN  = 0.28;  // só volume ACIMA disso enche a carga -> som baixo NÃO conta
+const VEL_CARGA  = 2.7;   // quão rápido a carga enche num rugido forte (por segundo)
+const DECAIMENTO = 1.0;   // quão rápido a carga escorre quando fica quieto (por segundo)
 
 // ---------- FASES (adicione/edite à vontade) ----------
 // Cada fase: um tema de céu, um nível de dificuldade e a lista de bichos (emoji + nome falado).
 const FASES = [
   { nome:"Quintal",  ceu:["#7ec8ff","#b8e6ff"], dificuldade:1.00, bichos:[
       {emoji:"🐰",nome:"coelho"},   {emoji:"🐤",nome:"pintinho"}, {emoji:"🐢",nome:"tartaruga"}]},
-  { nome:"Fazenda",  ceu:["#ffcf8f","#ffe6c2"], dificuldade:1.15, bichos:[
+  { nome:"Fazenda",  ceu:["#ffcf8f","#ffe6c2"], dificuldade:1.08, bichos:[
       {emoji:"🐄",nome:"vaca"},     {emoji:"🐷",nome:"porco"},    {emoji:"🐔",nome:"galinha"}]},
-  { nome:"Floresta", ceu:["#9fe0b6","#cdeedd"], dificuldade:1.30, bichos:[
+  { nome:"Floresta", ceu:["#9fe0b6","#cdeedd"], dificuldade:1.16, bichos:[
       {emoji:"🦊",nome:"raposa"},   {emoji:"🦉",nome:"coruja"},   {emoji:"🐿️",nome:"esquilo"}]},
-  { nome:"Selva",    ceu:["#8fd6e8","#c2ecf3"], dificuldade:1.50, bichos:[
+  { nome:"Selva",    ceu:["#8fd6e8","#c2ecf3"], dificuldade:1.25, bichos:[
       {emoji:"🐵",nome:"macaco"},   {emoji:"🐘",nome:"elefante"}, {emoji:"🦁",nome:"leão"}]},
 ];
 
