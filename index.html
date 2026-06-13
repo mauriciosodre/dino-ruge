@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Dino Ruge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ---------- Identidade visual: selva ensolarada, tudo gordinho e arredondado ----------
+     Paleta:
+       --ceu      #7ec8ff  (azul céu)
+       --ceu2     #b8e6ff  (céu claro)
+       --grama    #69c267  (verde folha)
+       --grama2   #4ea84d  (verde escuro)
+       --sol      #ffd23f  (amarelo sol)
+       --laranja  #ff8a3d  (acento / botão)
+       --texto    #2c4a2b  (verde quase preto)
+  */
+  :root{
+    --ceu:#7ec8ff; --ceu2:#b8e6ff; --grama:#69c267; --grama2:#4ea84d;
+    --sol:#ffd23f; --laranja:#ff8a3d; --texto:#2c4a2b;
+    --fonte:"Fredoka","Trebuchet MS",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%; overflow:hidden; font-family:var(--fonte); user-select:none;}
+  body{
+    background:linear-gradient(180deg,var(--ceu) 0%, var(--ceu2) 55%);
+    touch-action:manipulation;
+  }
+  #palco{position:fixed; inset:0; overflow:hidden;}
+
+  /* Sol e nuvens — só ambiente */
+  #sol{position:absolute; top:6vh; right:8vw; width:18vmin; height:18vmin;
+       background:var(--sol); border-radius:50%; box-shadow:0 0 12vmin rgba(255,210,63,.55);}
+  .nuvem{position:absolute; background:#fff; border-radius:50px; opacity:.9;
+         width:24vmin; height:8vmin;}
+  .nuvem::before,.nuvem::after{content:""; position:absolute; background:#fff; border-radius:50%;}
+  .nuvem::before{width:11vmin; height:11vmin; top:-5vmin; left:3vmin;}
+  .nuvem::after{width:8vmin; height:8vmin; top:-3vmin; left:12vmin;}
+  #n1{top:14vh; left:8vw;} #n2{top:24vh; right:24vw; transform:scale(.7);}
+
+  /* Chão de grama */
+  #chao{position:absolute; left:0; right:0; bottom:0; height:26vh;
+        background:linear-gradient(180deg,var(--grama),var(--grama2));
+        border-top:1.2vh solid #7ed87b; border-radius:50% 50% 0 0 / 12vh 12vh 0 0;}
+
+  /* ---------- O DINO: a estrela. Cresce e pula com o rugido ---------- */
+  #dino{position:absolute; left:50%; bottom:20vh; transform:translateX(-50%);
+        font-size:30vmin; line-height:1; transition:none; cursor:pointer;
+        filter:drop-shadow(0 1vh 0 rgba(0,0,0,.12));}
+
+  /* Bichinhos pra espantar */
+  .bicho{position:absolute; bottom:21vh; font-size:11vmin; line-height:1;
+         transition:transform .5s cubic-bezier(.34,1.56,.64,1), opacity .5s ease;}
+  .bicho.foi{transform:translate(var(--fugaX,40vw),-30vh) rotate(40deg) scale(.4); opacity:0;}
+
+  /* Medidor de rugido (folha que enche) */
+  #medidor{position:absolute; left:5vw; bottom:20vh; width:9vmin; height:42vh;
+           background:rgba(255,255,255,.45); border:.6vh solid #fff; border-radius:6vmin;
+           overflow:hidden;}
+  #nivel{position:absolute; left:0; right:0; bottom:0; height:0%;
+         background:linear-gradient(0deg,var(--laranja),var(--sol)); transition:height .06s linear;}
+
+  /* Plaquinhas de bichinho restante (pontinhos no topo) */
+  #placar{position:absolute; top:4vh; left:50%; transform:translateX(-50%);
+          display:flex; gap:2vmin; font-size:7vmin;}
+  #placar span{transition:transform .3s ease, opacity .3s ease;}
+  #placar span.foi{opacity:.25; transform:scale(.7);}
+
+  /* ---------- Overlays (começar / venceu) ---------- */
+  .tela{position:absolute; inset:0; display:flex; flex-direction:column;
+        align-items:center; justify-content:center; gap:4vh;
+        background:rgba(126,200,255,.55); backdrop-filter:blur(4px); z-index:10;}
+  .tela.oculto{display:none;}
+  .titulo{font-size:11vmin; font-weight:700; color:#fff; text-align:center;
+          text-shadow:0 .6vh 0 rgba(0,0,0,.18); line-height:1.05;}
+  .botao{font-family:var(--fonte); font-weight:700; font-size:7vmin; color:#fff;
+         background:var(--laranja); border:none; border-radius:50%;
+         width:34vmin; height:34vmin; box-shadow:0 1.2vh 0 #d96a22; cursor:pointer;
+         display:flex; align-items:center; justify-content:center; flex-direction:column;
+         gap:1vh; line-height:1; transition:transform .08s ease;}
+  .botao:active{transform:translateY(.8vh); box-shadow:0 .4vh 0 #d96a22;}
+  .botao small{font-size:4vmin; font-weight:600;}
+  .dica{color:#fff; font-size:4.5vmin; font-weight:600; opacity:.95; text-align:center;
+        max-width:80vw; line-height:1.3;}
+
+  /* Confete */
+  .confete{position:absolute; top:-5vh; width:2.5vmin; height:3.5vmin; border-radius:.4vmin;
+           z-index:9; animation:cai linear forwards;}
+  @keyframes cai{to{transform:translateY(115vh) rotate(720deg);}}
+
+  @media (prefers-reduced-motion: reduce){
+    .bicho,#nivel,.botao,#placar span{transition:none;}
+    .confete{display:none;}
+  }
+</style>
+</head>
+<body>
+<div id="palco">
+  <div id="sol"></div>
+  <div class="nuvem" id="n1"></div>
+  <div class="nuvem" id="n2"></div>
+  <div id="chao"></div>
+
+  <div id="placar"><span>🐰</span><span>🐤</span><span>🐢</span></div>
+
+  <div id="medidor"><div id="nivel"></div></div>
+
+  <div class="bicho" style="left:18vw; --fugaX:-50vw;">🐰</div>
+  <div class="bicho" style="left:70vw; --fugaX:50vw;">🐤</div>
+  <div class="bicho" style="left:82vw; --fugaX:55vw;">🐢</div>
+
+  <div id="dino" role="button" aria-label="Dino. Toque para rugir.">🦖</div>
+
+  <!-- Tela inicial: precisa de um toque pra liberar áudio/microfone no navegador -->
+  <div class="tela" id="telaInicio">
+    <div class="titulo">🦖<br>DINO RUGE</div>
+    <button class="botao" id="btnComecar">▶<small>começar</small></button>
+    <div class="dica">Rugir alto faz o dino pular e espantar os bichinhos! Toque no dino também vale 🗯️</div>
+  </div>
+
+  <!-- Tela de vitória -->
+  <div class="tela oculto" id="telaFim">
+    <div class="titulo">EBA! 🎉<br>VOCÊ CONSEGUIU!</div>
+    <button class="botao" id="btnDeNovo">↻<small>de novo</small></button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   DINO RUGE — protótipo de referência pro Godot
+   Loop central:  microfone  →  volume (RMS)  →  reação do jogo
+   Os comentários // GODOT: marcam o equivalente em GDScript.
+   ===================================================================== */
+
+const $ = (s)=>document.querySelector(s);
+const dino    = $("#dino");
+const nivelEl = $("#nivel");
+const bichos  = [...document.querySelectorAll(".bicho")];
+const placar  = [...document.querySelectorAll("#placar span")];
+
+// ---------- ESTADO DO JOGO ----------
+const estado = {
+  rodando:false,
+  volume:0,        // 0..1 suavizado
+  espantados:0,    // quantos bichinhos já fugiram
+  armado:true,     // histerese: só espanta de novo após o volume baixar
+};
+
+// Limiares do rugido (histerese evita espantar os 3 de uma vez num grito só)
+const LIMIAR_ALTO = 0.22;  // GODOT: passa de ALTO  -> conta um rugido
+const LIMIAR_BAIXO= 0.08;  // GODOT: cai abaixo     -> "re-arma" pro próximo
+
+// ---------- ÁUDIO: microfone -> analisador ----------
+// GODOT: AudioStreamMicrophone num bus com AudioEffectCapture.
+//        Lê-se o buffer com get_buffer() e calcula-se o RMS igual aqui.
+let audioCtx, analisador, dados;
+
+async function iniciarMic(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    audioCtx   = new (window.AudioContext||window.webkitAudioContext)();
+    const src  = audioCtx.createMediaStreamSource(stream);
+    analisador = audioCtx.createAnalyser();
+    analisador.fftSize = 1024;
+    dados = new Uint8Array(analisador.fftSize);
+    src.connect(analisador);   // não conecto no destino: não quero ouvir o eco
+    return true;
+  }catch(e){
+    // Sem permissão de microfone (ou bloqueado no iframe): o jogo segue no toque.
+    console.warn("Microfone indisponível, usando toque como rugido.", e);
+    return false;
+  }
+}
+
+// Lê o volume atual do microfone como RMS normalizado (0..1)
+// GODOT: mesma conta sobre os frames do AudioEffectCapture.
+function lerVolume(){
+  if(!analisador) return 0;
+  analisador.getByteTimeDomainData(dados);
+  let soma = 0;
+  for(let i=0;i<dados.length;i++){
+    const v = (dados[i]-128)/128;   // -1..1
+    soma += v*v;
+  }
+  const rms = Math.sqrt(soma/dados.length);
+  return Math.min(1, rms*3.2);      // ganho pra um rugido normal já encher a barra
+}
+
+// ---------- LOOP PRINCIPAL ----------
+// GODOT: o conteúdo daqui vai no _process(delta).
+function loop(){
+  if(!estado.rodando) return;
+
+  const alvo = lerVolume();
+  // Suavização (lerp) pra reação não tremer. GODOT: lerp(volume, alvo, 0.3)
+  estado.volume += (alvo - estado.volume) * 0.3;
+
+  reagir(estado.volume);
+  detectarRugido(estado.volume);
+
+  requestAnimationFrame(loop);
+}
+
+// O dino cresce e pula proporcional ao volume — o "feedback" que dá vida
+function reagir(vol){
+  const escala = 1 + vol*0.9;           // cresce
+  const pulo   = vol*22;                // sobe (vh)
+  dino.style.transform = `translateX(-50%) translateY(${-pulo}vh) scale(${escala})`;
+  nivelEl.style.height = (vol*100)+"%";
+}
+
+// Histerese: passou do alto (e estava armado) => espanta um bichinho
+function detectarRugido(vol){
+  if(estado.armado && vol > LIMIAR_ALTO){
+    estado.armado = false;
+    espantarProximo();
+  }else if(!estado.armado && vol < LIMIAR_BAIXO){
+    estado.armado = true;             // re-arma pro próximo rugido distinto
+  }
+}
+
+// ---------- AÇÕES DO JOGO ----------
+const NUMEROS = ["um","dois","três"];
+
+function espantarProximo(){
+  if(estado.espantados >= bichos.length) return;
+  const i = estado.espantados;
+  bichos[i].classList.add("foi");
+  placar[i].classList.add("foi");
+  estado.espantados++;
+
+  falar(NUMEROS[i]);                  // conta em voz alta: "um... dois... três"
+
+  if(estado.espantados === bichos.length){
+    setTimeout(vencer, 700);
+  }
+}
+
+// Voz pt-BR (sem texto na tela pra criança ler)
+function falar(texto){
+  if(!("speechSynthesis" in window)) return;
+  const u = new SpeechSynthesisUtterance(texto);
+  u.lang = "pt-BR"; u.rate = 0.9; u.pitch = 1.3;
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+
+function vencer(){
+  estado.rodando = false;
+  falar("Eba! Você conseguiu!");
+  jogarConfete();
+  $("#telaFim").classList.remove("oculto");
+}
+
+// Toque no dino também conta como rugido (fallback e diversão pra mãos pequenas)
+dino.addEventListener("pointerdown", ()=>{
+  if(!estado.rodando) return;
+  // simula um pico curto de volume
+  estado.volume = 0.6; estado.armado = true;
+  detectarRugido(estado.volume);
+  reagir(estado.volume);
+});
+
+// ---------- CONTROLE DE TELAS ----------
+async function comecar(){
+  $("#telaInicio").classList.add("oculto");
+  await iniciarMic();                 // pede o microfone (precisa do toque do usuário)
+  reset();
+  estado.rodando = true;
+  loop();
+}
+
+function reset(){
+  estado.espantados = 0; estado.volume = 0; estado.armado = true;
+  bichos.forEach(b=>b.classList.remove("foi"));
+  placar.forEach(p=>p.classList.remove("foi"));
+  $("#telaFim").classList.add("oculto");
+}
+
+$("#btnComecar").addEventListener("click", comecar);
+$("#btnDeNovo").addEventListener("click", ()=>{ reset(); estado.rodando=true; loop(); });
+
+// ---------- Confete (só enfeite da vitória) ----------
+function jogarConfete(){
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cores=["#ff8a3d","#ffd23f","#69c267","#7ec8ff","#ff5d8f"];
+  for(let i=0;i<70;i++){
+    const c=document.createElement("div");
+    c.className="confete";
+    c.style.left=Math.random()*100+"vw";
+    c.style.background=cores[i%cores.length];
+    c.style.animationDuration=(1.5+Math.random()*1.5)+"s";
+    c.style.animationDelay=(Math.random()*0.4)+"s";
+    document.getElementById("palco").appendChild(c);
+    setTimeout(()=>c.remove(),3500);
+  }
+}
+</script>
+</body>
+</html>
